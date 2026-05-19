@@ -1,3 +1,6 @@
+# Modified for DGX Spark ARM64 by igashira0324 on 2026-05-19
+# - Added benchmark logging for latency, peak VRAM/Unified Memory, and result saving
+
 import os
 import time
 import torch

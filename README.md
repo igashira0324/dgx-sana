@@ -185,18 +185,26 @@ python3 -c "from huggingface_hub import snapshot_download; snapshot_download(rep
 
 > 💡 **実機検証結果**: flash-attn 未インストール時の自動フォールバック（xformers / SDPA）が正常に機能し、画像生成については極めて軽快な動作と実用的な速度を記録しました。
 
+### 計測条件と詳細仕様
+* **モデル精度**: `bfloat16` (`bf16` / 混合精度)
+* **生成設定**: 20 steps / `flow_dpm-solver` scheduler
+* **バックエンド**: `xformers` memory-efficient attention (flash-attn 未インストールによる自動フォールバック)
+* **推論時間**: **6.46秒**（初回実行を除くウォームアップ完了後の3回計測における中央値）。
+  * *初回実行時*: モデルロードおよびJITコンパイル等の初期化処理を含めて約 **15 秒**。
+  * *モデルロード時間*: キャッシュからの初回読み込み時間は約 **8.7 秒**。
+
 | タスク | 解像度 | 生成時間 | メモリ使用量 (VRAM) | 備考 / サンプラー |
 |---|---|---|---|---|
-| **SANA 画像生成 (1.6B)** | 1024×1024 | **6.46 秒** | **12.18 GB** | 20 steps / `flow_dpm-solver` (xformers フォールバック) |
-| SANA-Sprint 1step | 1024×1024 | TBD | TBD | |
-| SANA-Video | 720p (5秒) | TBD | TBD | |
-| SANA-WM | 720p (60秒) | TBD | TBD | 長尺動画生成時の OOM 限界は今後要検証 |
+| **SANA 画像生成 (1.6B)** | 1024×1024 | **6.46 秒** | **12.18 GB** | `bf16` / 20 steps / `flow_dpm-solver` (xformers フォールバック・3回計測中央値) |
+| SANA-Sprint 1step | 1024×1024 | TBD | TBD | **[優先検証ターゲット]** リアルタイム業務用途向け（1step）のレイテンシ検証用 |
+| SANA-Video | 720p (5秒) | TBD | TBD | 動画生成（flash-attn なしフォールバック時の挙動検証） |
+| SANA-WM | 720p (60秒) | TBD | TBD | **[想定リスク]** 未検証。flash-attn なしではアテンション計算量が爆発し、OOMやハングが発生する可能性が高い想定 |
 
 ### 参考: 他環境の公称・実測値 (公式発表)
 
 | 環境 | タスク | 生成時間 | 備考 |
 |---|---|---|---|
-| **H100 (80 GB)** | SANA 1.6B 画像生成 (1024px) | **1.2 秒** | flash-attn あり (公式公称値) |
+| **H100 (80 GB)** | SANA 1.6B 画像生成 (1024px) | **1.2 秒** | `bf16` / flash-attn あり (公式公称値) |
 | RTX 5090 (32 GB) + NVFP4 | SANA-WM 720p 60秒 | ~34 秒 | (公式発表) |
 
 ---
