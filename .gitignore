@@ -1,3 +1,6 @@
+# Modified for DGX Spark ARM64 by igashira0324 on 2026-05-19
+# - Added sana_env/ to ignore the local python virtual environment
+
 # Sana related files
 *_dev.py
 *_dev.sh

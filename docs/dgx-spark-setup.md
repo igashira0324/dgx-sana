@@ -19,8 +19,8 @@
 ## Step 1: リポジトリのクローン
 
 ```bash
-cd /home/nttdmse/aipf/worldmodel
-git clone https://github.com/NVlabs/Sana.git sana
+cd $HOME/aipf/worldmodel
+git clone https://github.com/igashira0324/dgx-sana.git sana
 cd sana
 ```
 
@@ -36,17 +36,15 @@ pip install -U pip setuptools wheel ninja
 
 ## Step 3: PyTorch のインストール
 
-ARM64 向けの PyTorch wheel は `cu124` インデックスから取得します。
-DGX Spark は CUDA 13.0 ですが、PyTorch の cu124 wheel で動作確認済みです。
+DGX Spark (ARM64, CUDA 13.0) 向けの PyTorch は、追加の wheel インデックス（cu124等）を指定しなくても、**通常の PyPI リポジトリから直接インストール可能です**。
 
 ```bash
-pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
+pip install torch torchvision torchaudio
 ```
 
-実際にインストールされるバージョン:
-- torch: 2.12.0+cu130 (pip が自動的に互換バージョンを解決)
-- torchvision: 対応バージョン
-- torchaudio: 対応バージョン
+**インストールの整合性と整合元について**:
+- **PyTorch 2.12.0+cu130** が標準の PyPI リポジトリからネイティブの ARM64 (aarch64) ビルドとして解決されます。
+- CUDA 13.0 および Blackwell アーキテクチャ (sm_120) 向けの最適化が標準で組み込まれているため、追加の nightly インデックスや NGC コンテナ等から wheel を持ってくる必要はありません。
 
 ## Step 4: mmcv の手動インストール
 
@@ -64,21 +62,20 @@ pip install cython
 pip install mmcv==1.7.2 --no-build-isolation
 ```
 
-## Step 5: SANA 本体のインストール
+## Step 5: SANA 本体のインストールと xformers ビルド
 
 ```bash
 pip install -e .
 ```
 
 このステップでは大量の依存パッケージがインストールされます。
-特に `xformers==0.0.32.post2` は ARM64 用のプリビルド wheel が存在しないため、
-**ソースからのビルドが自動的に実行されます**（15〜30分程度）。
 
-### xformers ビルド時の注意
-
-- ビルドには `ninja` が必要（Step 2 でインストール済み）
-- CUDA 13.0 + Compute Capability 12.1 (Blackwell) のカーネルがコンパイルされる
-- メモリ使用量が大きいため、他の重い処理は避けること
+> [!WARNING]
+> **xformers のコンパイル時間に関する注意**
+> `xformers==0.0.32.post2` は ARM64 向けにビルド済みの wheel が存在しないため、**完全にソースからコンパイルされます**。
+> - コンパイルには **約15〜30分** かかり、進捗表示が一時的に止まります（フリーズではありません）。
+> - コンパイルの並列度を上げ、フリーズやメモリ不足 (OOM) を防ぐため、`setup_sana_env.sh` 内では `export MAX_JOBS=16` を設定しています。マシンスペックに合わせてコア数を調整してください。
+> - 事前に `ninja` が正しくインストールされていることを確認してください（Step 2 で導入済み）。
 
 ## Step 6: インストール検証
 
@@ -104,7 +101,7 @@ Diffusion module successfully imported.
 
 ---
 
-## インストールできなかったパッケージ
+## インストールできなかったパッケージと影響
 
 ### flash-attn
 
@@ -116,7 +113,10 @@ ARM64 (aarch64) 向けのビルド済み wheel が PyPI に存在しません。
 # pip install flash-attn==2.8.2 --no-build-isolation
 ```
 
-**影響**: SANA は `xformers` または PyTorch ネイティブの attention にフォールバックするため、推論自体は可能です。ただし、特にSANA-WMの長時間動画生成（60秒720p）では性能差が出る可能性があります。
+**フォールバックの具体的な挙動と影響**:
+- **インポートと基本動作**: `flash-attn` が未インストールでも `test_sana_wm.py` のインポートおよび動作検証は正常に通ります。
+- **アテンションのフォールバック**: SANA は自動的に `xformers` の `memory_efficient_attention` もしくは PyTorch ネイティブの `scaled_dot_product_attention` (SDPA / PyTorch 2.0+ の機能) へフォールバックします。
+- **パフォーマンスと制限**: SDPA および xformers フォールバックにより画像生成や短尺の動画生成は動作可能ですが、SANA-WM の特徴である **60秒クラスの長尺 720p 動画生成** を実行する際には、メモリ効率や計算レイテンシの面で差が出る（またはシーケンス長が長くなった際に OOM が発生しやすくなる）可能性があります。
 
 **今後の対応策**:
 1. flash-attn の ARM64 対応リリースを待つ
@@ -178,4 +178,3 @@ git merge upstream/main
 - [NVlabs/Sana (公式リポジトリ)](https://github.com/NVlabs/Sana)
 - [SANA-WM プロジェクトページ](https://nvlabs.github.io/Sana/WM/)
 - [DGX Spark 公式ページ](https://www.nvidia.com/dgx-spark/)
-- [PyTorch ARM64 Wheels](https://download.pytorch.org/whl/cu124)

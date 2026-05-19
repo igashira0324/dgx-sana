@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Modified for DGX Spark ARM64 by igashira0324 on 2026-05-19
+# - Added basic imports, PyTorch/CUDA availability checks, and SANA import tests to verify the env
 import sys
 
 print("=== SANA-WM DGX SPARK Validation Script ===")
