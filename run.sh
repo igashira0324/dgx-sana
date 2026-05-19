@@ -28,11 +28,17 @@ elif [ "$MODE" = "sana" ]; then
 elif [ "$MODE" = "gui" ]; then
     echo "=== Launching SANA 1.5 1.6B Web UI ==="
     python3 app_gui.py
+elif [ "$MODE" = "video" ]; then
+    echo "=== Running SANA-Video 2B (480p, 5 seconds) ==="
+    bash inference_video_scripts/inference_sana_video.sh \
+      --config=configs/sana_video_config/Sana_2000M_480px_AdamW_fsdp.yaml \
+      --model_path=hf://Efficient-Large-Model/SANA-Video_2B_480p/checkpoints/SANA_Video_2B_480p.pth \
+      --np=1
 elif [ "$MODE" = "benchmark" ]; then
     echo "=== Running SANA-WM Benchmark ==="
     python3 test_benchmark.py
 else
     echo "ERROR: Invalid mode '$MODE'."
-    echo "Usage: bash run.sh [sana|sprint|gui|benchmark]"
+    echo "Usage: bash run.sh [sana|sprint|gui|video|benchmark]"
     exit 1
 fi
