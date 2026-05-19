@@ -197,8 +197,8 @@ python3 -c "from huggingface_hub import snapshot_download; snapshot_download(rep
 |---|---|---|---|---|
 | **SANA 画像生成 (1.6B)** | 1024×1024 | **6.46 秒** | **12.18 GB** | `bf16` / 20 steps / `flow_dpm-solver` (xformers フォールバック・3回計測中央値) |
 | SANA-Sprint 1step | 1024×1024 | TBD | TBD | **[優先検証ターゲット]** リアルタイム業務用途向け（1step）のレイテンシ検証用 |
-| SANA-Video | 720p (5秒) | TBD | TBD | 動画生成（flash-attn なしフォールバック時の挙動検証） |
-| SANA-WM | 720p (60秒) | TBD | TBD | **[想定リスク]** 未検証。flash-attn なしではアテンション計算量が爆発し、OOMやハングが発生する可能性が高い想定 |
+| **SANA-Video (2B)** | 480p (5秒 / 81f) | **約 12.4 分** | 高負荷 (OSロック有) | `bf16` / 50 steps。10件連続生成で実測124分 (736秒/件)。Unified Memory特有のメモリスワップ/スラッシングによりOSが極端に重くなる現象を確認。 |
+| SANA-WM | 720p (60秒) | TBD | TBD | **[想定リスク]** 未検証。flash-attn なしではアテンション計算量が爆発し、OOMや完全なフリーズが発生する可能性が高い |
 
 ### 参考: 他環境の公称・実測値 (公式発表)
 
