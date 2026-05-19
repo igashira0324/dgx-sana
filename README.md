@@ -159,25 +159,45 @@ pip install mmcv==1.7.2 --no-build-isolation
 
 **回避策**: upstream 由来の `.github/workflows/` を削除してコミット。本フォークでは CI 不要のため問題なし。
 
+### 6. `xformers` の ARM64 向けコンパイル所要時間（15〜30分）
+
+**症状**: `pip install xformers==0.0.32.post2` の実行時に進行表示が完全に停止し、フリーズしたように見える。
+
+**原因**: ARM64 向けにビルド済みの xformers の wheel が存在しないため、ソースコードから完全に C++ / CUDA コンパイルが走る。
+
+**回避策**: これはフリーズではないため、**そのまま15〜30分待機**してください。並列コンパイルでフリーズや OOM を防ぐため、`setup_sana_env.sh` 内では `export MAX_JOBS=16` を設定しています。コンパイルを高速化するために、事前に `pip install ninja` が入っていることを確認してください。
+
+### 7. Hugging Face の Gated Model による推論の「停滞」
+
+**症状**: 初回の推論実行時に、進捗表示がないまま、プログラムが完全に停止（停滞）する。
+
+**原因**: SANAのデフォルト設定ファイルでは、テキストエンコーダとして Google の `gemma-2-2b-it` を指定している。これは Hugging Face の **Gated Model（ゲート付きモデル）** であり、利用規約への合意とアカウント側のアクセス承認（レビュー完了）が必要。アクセス許可がない状態で API が叩かれると、ダウンロードが拒否されるか、無限に入力待ちになりフリーズする。
+
+**回避策**: SANAのソースコード（`diffusion/model/builder.py`）の `get_tokenizer_and_text_encoder` を確認すると、`gemma-2-2b-it` のマッピング先はゲートフリーのミラーである **`Efficient-Large-Model/gemma-2-2b-it`** に修正されています。このミラーは誰でも自由にダウンロードできますが、初回起動時に総計約10GBのアセット（Gemma-2-2b + SANAチェックポイント等）をダウンロードするため、プロキシ環境下で進捗表示が見えないとハングしたように見えます。
+ハングを回避するために、事前に `huggingface-hub` を使ってバックグラウンドで事前キャッシュしておくことを推奨します：
+```bash
+python3 -c "from huggingface_hub import snapshot_download; snapshot_download(repo_id='Efficient-Large-Model/gemma-2-2b-it', token=True)"
+```
+
 ---
 
-## ベンチマーク (TODO)
+## ベンチマーク実測値 (DGX Spark 実測)
 
-> ⚠️ 以下は今後計測予定の項目です。計測結果が出次第、更新します。
+> 💡 **実機検証結果**: flash-attn 未インストール時の自動フォールバック（xformers / SDPA）が正常に機能し、画像生成については極めて軽快な動作と実用的な速度を記録しました。
 
-| タスク | 解像度 | 長さ | 生成時間 | メモリ使用量 | 備考 |
-|---|---|---|---|---|---|
-| SANA 画像生成 | 1024×1024 | — | TBD | TBD | |
-| SANA-Sprint 1step | 1024×1024 | — | TBD | TBD | |
-| SANA-Video | 720p | 5秒 | TBD | TBD | |
-| SANA-WM | 720p | 60秒 | TBD | TBD | flash-attn 不在の影響 |
+| タスク | 解像度 | 生成時間 | メモリ使用量 (VRAM) | 備考 / サンプラー |
+|---|---|---|---|---|
+| **SANA 画像生成 (1.6B)** | 1024×1024 | **6.46 秒** | **12.18 GB** | 20 steps / `flow_dpm-solver` (xformers フォールバック) |
+| SANA-Sprint 1step | 1024×1024 | TBD | TBD | |
+| SANA-Video | 720p (5秒) | TBD | TBD | |
+| SANA-WM | 720p (60秒) | TBD | TBD | 長尺動画生成時の OOM 限界は今後要検証 |
 
-### 参考: 公称値 (公式発表)
+### 参考: 他環境の公称・実測値 (公式発表)
 
-| 環境 | タスク | 生成時間 |
-|---|---|---|
-| H100 (80 GB) | SANA-WM 720p 60秒 | 公称スペック内 |
-| RTX 5090 (32 GB) + NVFP4 | SANA-WM 720p 60秒 | ~34秒 |
+| 環境 | タスク | 生成時間 | 備考 |
+|---|---|---|---|
+| **H100 (80 GB)** | SANA 1.6B 画像生成 (1024px) | **1.2 秒** | flash-attn あり (公式公称値) |
+| RTX 5090 (32 GB) + NVFP4 | SANA-WM 720p 60秒 | ~34 秒 | (公式発表) |
 
 ---
 
