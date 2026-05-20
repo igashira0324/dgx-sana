@@ -8,7 +8,6 @@
 .gradio/
 .idea/
 *.png
-*.mp4
 # *.json
 tmp*
 output*
@@ -200,3 +199,8 @@ cython_debug/
 checkpoints
 .deepspeed*
 prompts
+
+# Allow tracking of sample images/videos in asset/samples
+!asset/samples/**/*.png
+!asset/samples/**/*.mp4
+!asset/samples/**/output*
