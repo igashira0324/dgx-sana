@@ -157,7 +157,7 @@ ARM64 環境では一部の依存パッケージで PyPI にビルド済み whee
 
 ### 計測メタ情報 (詳細条件)
 * **計測実施日**: 2026年5月20日
-* **検証コミットID**: `6c1c162` (SANA-Sprint計測追加コミット)
+* **ベンチマーク取得時コミットID**: `6c1c162` (※本READMEの最新更新内容はこれより新しいコミットに含まれます)
 * **OS / GPUドライバ**: Ubuntu 24.04.4 LTS / NVIDIA Driver 580.142 / CUDA 13.0
 * **PyTorch バージョン**: 2.12.0+cu130 (ARM64用ビルド)
 * **モデル精度**: `bfloat16` (`bf16` / 混合精度)
@@ -346,9 +346,9 @@ SANAが使用するテキストエンコーダや一部のモデルは Hugging F
 ### 2. プロキシ環境下でのGit運用と認証
 社内等のプロキシ環境下でプロキシエラーにより Git のプッシュ・プルが失敗する場合は、以下のように一時的にプロキシ設定をアンセットして実行することを推奨します。
 ```bash
-env -u http_proxy -u https_proxy git push origin main
+env -u http_proxy -u https_proxy -u HTTP_PROXY -u HTTPS_PROXY git push origin main
 ```
-* **認証情報の平文保存回避**: コマンドライン履歴（`.bash_history` など）に Personal Access Token (PAT) を含む URL を残さないよう、SSHキーペアによる認証か、資格情報ヘルパー (`git-credential-store`等) を使用してください。
+* **認証情報の平文保存回避**: コマンドライン履歴（`.bash_history` など）に Personal Access Token (PAT) を含む URL を残さないよう、SSHキーペアによる認証を推奨します。HTTPS認証を使用する場合は、環境に応じて Git Credential Manager や適切な資格情報ヘルパーを利用してください。なお、`git-credential-store` は認証情報を平文で保存するため、セキュリティルール（社内規定等）に従って十分注意して利用してください。
 
 ---
 
@@ -368,9 +368,15 @@ dgx-sana/
 ├── docs/
 │   └── dgx-spark-setup.md  ← 詳細セットアップ手順
 ├── asset/
-│   └── samples/video/      ← DGX Spark 実機生成サンプル動画
-│       ├── sample_anime.mp4 ← アニメ風女性（SANA-Video 2B 480p 5秒）
-│       └── sample_car.mp4  ← アニメ風自動車（SANA-Video 2B 480p 5秒）
+│   └── samples/
+│       ├── video/          ← DGX Spark 実機生成サンプル動画とメタデータ
+│       │   ├── sample_anime.mp4
+│       │   ├── sample_car.mp4
+│       │   └── metadata.md
+│       └── image/          ← DGX Spark 実機生成サンプル画像とメタデータ
+│           ├── output_sana_*.png
+│           ├── output_sprint_*.png
+│           └── metadata.md
 ├── inference_video_scripts/ ← 動画推論スクリプト (公式と同一)
 └── configs/                 ← モデル設定ファイル (公式と同一)
 ```
