@@ -1,6 +1,6 @@
-# dgx-sana — SANA-WM on DGX Spark (ARM64)
+# dgx-sana — SANA / SANA-Video on DGX Spark (ARM64)
 
-> **NVlabs/Sana を DGX Spark (GB10 · ARM64 · Unified Memory 128 GB) で動かすための検証用フォークです。**
+> **NVlabs/Sana を DGX Spark (GB10 · ARM64 · Unified Memory 128 GB) で動作させるための検証用フォークです。**
 >
 > 公式リポジトリ: [NVlabs/Sana](https://github.com/NVlabs/Sana)
 > プロジェクトページ: [SANA-WM](https://nvlabs.github.io/Sana/WM/)
@@ -13,7 +13,10 @@
 1枚の画像とカメラ軌跡（6-DoF）を入力として、720p・最大1分間の動画を生成できます。
 
 本リポジトリは、**DGX Spark (ARM64 + Blackwell GB10)** という稀少な環境で SANA を動作させるために行った
-環境構築手順、依存パッケージの修正内容、ハマりどころと回避策を記録・共有するものです。
+環境構築手順・依存パッケージの修正・実機ベンチマーク結果・ハマりどころと回避策を記録・共有するものです。
+
+> ⚠️ **このドキュメントは「実機検証に基づいたリファレンス」として書いています。**
+> 論文やプロジェクトページの公称値と実機結果が大幅に乖離している点について、原因を含めて詳しく記録しています。
 
 公式 README は → [NVlabs/Sana README](https://github.com/NVlabs/Sana/blob/main/README.md)
 
@@ -35,6 +38,61 @@
 | **PyTorch** | 2.12.0+cu130 (ARM64 wheel) |
 | **bf16 サポート** | ✅ 対応 |
 | **CUDA Arch List** | sm_80, sm_90, sm_100, sm_110, sm_120 |
+
+---
+
+## 実行モード一覧
+
+本フォークでは `run.sh` から 5つの動作モードを選択できます。
+
+```bash
+bash run.sh [sana|sprint|gui|video|benchmark]
+```
+
+| モード | コマンド | 説明 |
+|---|---|---|
+| `sana` | `bash run.sh sana` | SANA 1.6B 標準推論（高品質・20 steps） |
+| `sprint` | `bash run.sh sprint` | SANA-Sprint（1〜2 step 高速推論） |
+| `gui` | `bash run.sh gui` | Gradio Web UI（ブラウザで操作） |
+| `video` | `bash run.sh video` | SANA-Video 2B (480p / 81フレーム / 5秒) |
+| `benchmark` | `bash run.sh benchmark` | インストール検証・ベンチマーク |
+
+---
+
+## クイックスタート
+
+```bash
+# 1. リポジトリをクローン
+git clone https://github.com/igashira0324/dgx-sana.git
+cd dgx-sana
+
+# 2. 環境構築 (venv + 依存パッケージのインストール)
+bash setup_sana_env.sh
+
+# 3. インストール検証
+source sana_env/bin/activate
+python3 test_sana_wm.py
+
+# 4. 画像生成（推奨スタート）
+bash run.sh sana
+
+# 5. Web UI 起動
+bash run.sh gui
+# → ブラウザで http://127.0.0.1:7860 にアクセス
+```
+
+期待される出力:
+```
+=== SANA-WM DGX SPARK Validation Script ===
+PyTorch Version: 2.12.0+cu130
+CUDA Available: True
+CUDA Device Name: NVIDIA GB10
+SANA successfully imported. Version: Unknown
+Diffusion module successfully imported.
+=== Validation Complete ===
+```
+
+詳細な手順・トラブルシューティングは → [docs/dgx-spark-setup.md](docs/dgx-spark-setup.md)
 
 ---
 
@@ -65,38 +123,13 @@ ARM64 環境では一部の依存パッケージで PyPI にビルド済み whee
 | ファイル | 説明 |
 |---|---|
 | `setup_sana_env.sh` | DGX Spark 向けの環境構築スクリプト (venv + pip) |
+| `run.sh` | 1コマンドで各モードを実行するディスパッチャ |
+| `app_gui.py` | Gradio Web UI（127.0.0.1 バインドでプロキシ問題を回避） |
+| `run_sana.py` | 高品質 SANA 1.6B 推論スクリプト（ウォームアップ・中央値計測付き） |
+| `run_sprint.py` | SANA-Sprint（1〜2 step）超高速推論スクリプト |
 | `test_sana_wm.py` | インストール検証スクリプト (PyTorch / CUDA / SANA import テスト) |
 | `docs/dgx-spark-setup.md` | 詳細なセットアップ手順とトラブルシューティング |
-
----
-
-## クイックスタート
-
-```bash
-# 1. リポジトリをクローン
-git clone https://github.com/igashira0324/dgx-sana.git
-cd dgx-sana
-
-# 2. 環境構築 (venv + 依存パッケージのインストール)
-bash setup_sana_env.sh
-
-# 3. インストール検証
-source sana_env/bin/activate
-python3 test_sana_wm.py
-```
-
-期待される出力:
-```
-=== SANA-WM DGX SPARK Validation Script ===
-PyTorch Version: 2.12.0+cu130
-CUDA Available: True
-CUDA Device Name: NVIDIA GB10
-SANA successfully imported. Version: Unknown
-Diffusion module successfully imported.
-=== Validation Complete ===
-```
-
-詳細な手順・トラブルシューティングは → [docs/dgx-spark-setup.md](docs/dgx-spark-setup.md)
+| `asset/samples/video/` | DGX Spark 上で実際に生成された動画サンプル（SANA-Video 2B） |
 
 ---
 
@@ -112,6 +145,99 @@ Diffusion module successfully imported.
 | accelerate | 1.0.1 | ✅ |
 | mmcv | 1.7.2 | ✅ 手動ビルド (`--no-build-isolation`) |
 | flash-attn | — | ❌ 未インストール (ARM64 wheel 未提供) |
+
+---
+
+## ベンチマーク実測値 (DGX Spark 実測)
+
+> ⚠️ **重要**: 下記の実測値は、**flash-attn なし・PyTorch フォールバック実装**で計測した値です。
+> 公式の論文値・H100 公称値とは大幅に乖離しています。乖離の原因については後述の「[実装成熟度と実機乖離について](#実装成熟度と実機乖離について)」を参照してください。
+
+### 計測条件
+
+* **モデル精度**: `bfloat16` (`bf16` / 混合精度)
+* **バックエンド**: `xformers` memory-efficient attention または SDPA (flash-attn 未インストールによる自動フォールバック)
+
+### DGX Spark 実測値
+
+| タスク | 解像度 | 生成時間 | 備考 |
+|---|---|---|---|
+| **SANA 画像生成 (1.6B)** | 1024×1024 | **6.46 秒** | 20 steps / `flow_dpm-solver` / xformers フォールバック・3回計測中央値。初回ロード ~15秒 |
+| SANA-Sprint (1step) | 1024×1024 | TBD | 1〜2 step。実測未完了 |
+| **SANA-Video (2B)** | 480p (5秒 / 81f) | **約 12.4 分/件** | 50 steps。10件連続で実測 124分 (736秒/件)。**OSが応答不能になる現象を確認（後述）** |
+| SANA-WM | 720p (60秒) | **未実施** | チェックポイント未公開 (2026-05 現在)。実行リスクも高いため未計測 |
+
+### 参考: 公式環境の公称値
+
+| 環境 | タスク | 生成時間 | 備考 |
+|---|---|---|---|
+| **H100 (80 GB)** | SANA 1.6B 画像生成 (1024px) | **1.2 秒** | `bf16` / flash-attn あり (公式公称値) |
+| **H100 (80 GB)** | SANA-Video 2B (480p / 5秒) | **36 秒** | `bf16` / 専用最適化カーネル (公式公称値) |
+| RTX 5090 + NVFP4 | SANA-WM 720p 60秒 | ~34 秒 | 最適化カーネル + 量子化 (公式発表) |
+
+> 📌 **乖離の規模**: 画像生成は H100 比 **約 5.4 倍**（6.46秒 vs 1.2秒）、動画生成は H100 比 **約 20 倍**（736秒 vs 36秒）。
+> この乖離が単なるハードウェアの差ではなく、実装レベルの問題に起因することを次節で説明します。
+
+---
+
+## 実装成熟度と実機乖離について
+
+### なぜ SANA-Video は LTX-Video や WAN より遅く、OS をフリーズさせたのか
+
+これは **「論文の理論値」と「現在の PyTorch 実装の成熟度」のギャップ**が引き起こした問題です。
+DGX Spark 上での実機計測を通じて、以下の 3 つの根本原因を特定しました。
+
+#### 原因 1: `float64` 強制キャスト（最大のボトルネック）
+
+SANA-Video の線形アテンション実装（`LiteLAReLURope`、`diffusion/model/nets/sana_blocks.py`）は、
+位置エンコーディング（RoPE）適用の際に毎ステップ `float64`（倍精度）へのキャストを行っています。
+
+```python
+# sana_blocks.py より抜粋 — 毎ステップこれが走る
+def apply_rotary_emb(hidden_states: torch.Tensor, freqs: torch.Tensor):
+    x_rotated = torch.view_as_complex(
+        hidden_states.permute(0, 1, 3, 2).to(torch.float64)  # ← bf16 → float64 へ強制変換
+        .unflatten(3, (-1, 2))
+    )
+    x_out = torch.view_as_real(x_rotated * freqs).flatten(3, 4).permute(0, 1, 3, 2)
+    return x_out.type_as(hidden_states)
+```
+
+GB10 を含む現代の NVIDIA GPU は、AI 推論で常用される `bf16` / `fp16` には大量の演算ユニットを割り当てていますが、`float64`（FP64）の演算能力は `fp32` の 1/32〜1/64 程度に意図的に制限されています。推論パス全体を `bf16` で統一した状態で、このキャストが発生し続けることが深刻なスローダウンの主因です。
+
+#### 原因 2: PyTorch SDPA の高速パスに乗れない（素の Eager 実行）
+
+LTX-Video や WAN-2.1 は標準的な Softmax Attention を使用しているため、PyTorch 組み込みの `F.scaled_dot_product_attention`（SDPA）によって、C++/CUDA で最適化された FlashAttention 等のカーネルが自動的に選択されます。
+
+SANA-Video の線形アテンション（ReLU カーネルベース）は、数式的に Softmax と異なるため SDPA の対象外です。結果として `torch.matmul` の連鎖が PyTorch Eager モード（素の Python）で実行され、最適化カーネルの恩恵を一切受けられません。
+
+#### 原因 3: Unified Memory 特有の「OS 全体フリーズ」
+
+上記 (1)(2) の最適化不足により、各ステップで大量の中間テンソルが動的に確保されます。通常の Discrete GPU（独立 VRAM）であれば `CUDA Out of Memory` エラーでプロセスが即座に終了します。
+
+DGX Spark の Unified Memory（CPU・GPU 共有の 128 GB LPDDR5X）は OOM で死なず、代わりにホストメモリ全体を使い切ろうとします。これがカーネルレベルのメモリ圧迫とスラッシング（CPU-GPU 間の激しいデータ転送）を引き起こし、プロセス単体ではなく **OS 全体が応答不能（完全フリーズ）** になる現象が発生しました。
+
+> 📋 **実測まとめ**: 10件の 5秒動画生成を完走（OOM クラッシュなし）したが、その 124 分間 OS は応答不能だった。これは Unified Memory アーキテクチャの「失敗モード」を示す貴重なデータポイントです。
+
+### モデル別 実機適合性の整理
+
+| モデル | 理論上の設計 | 実装成熟度 | SDPA 適合 | DGX Spark 実績 |
+|---|---|---|---|---|
+| Flux / SD3 | 標準的・重い | 高い | ✅ | 重いが安定 |
+| LTX-Video | 標準的 | 高い | ✅ | 速く安定 |
+| WAN-2.1 | 標準的 | 高い | ✅ | 速く安定 |
+| **SANA 画像 (1.6B)** | 革新的・軽量設計 | 中〜高 | △ (独自カーネル前提) | ✅ 実用ラインに到達 |
+| **SANA-Video (2B)** | 革新的・長尺特化 | **低い（研究初期）** | ❌ (FP64混入 / Eager実行) | ⚠️ 完走するが OS フリーズ |
+| SANA-WM | 革新的・6-DoF制御 | 未公開 | 未確認 | 🔒 チェックポイント未公開 |
+
+### 業務利用の指針
+
+* **今すぐ動画生成を業務に使いたい**: → **LTX-Video / WAN-2.1** を採用してください。DGX Spark 上でも快適に動作します。
+* **静止画生成（高速・高品質）**: → **SANA 1.6B / SANA-Sprint** は実用ラインに到達しており有効です。
+* **将来のワールドモデル（SANA-WM）に備えたい**: → 画像系（SANA 1.6B）で運用ノウハウを溜めつつ、SANA-WM チェックポイントの公開を待つ戦略が合理的です。
+
+> 💡 **SANA-Video / SANA-WM の真価が発揮されるのは、最適化カーネル（Triton/CUDA 実装・FP64 排除）が揃った後です。**
+> SANA 1.0 → SANA-Sprint の進化が示すように、画像系では既に最適化の第二フェーズに入っています。動画系も 6〜12 ヶ月以内に追随することが期待されます。
 
 ---
 
@@ -145,13 +271,15 @@ pip install mmcv==1.7.2 --no-build-isolation
 
 **回避策**: バージョン固定を外し、pip に PyTorch と互換のバージョンを自動解決させる。
 
-### 4. `flash-attn` の ARM64 ビルド
+### 4. `flash-attn` の ARM64 ビルド不可
 
 **現状**: ARM64 (aarch64) 向けのビルド済み wheel が PyPI に存在せず、ソースビルドも CUDA カーネルのコンパイルが ARM64 で未対応のため失敗する。
 
-**影響**: flash-attn が無い場合、SANA は xformers または PyTorch ネイティブの attention にフォールバックする。推論は可能だが、パフォーマンスが低下する可能性がある。
+**影響**: flash-attn が無い場合、SANA は xformers または PyTorch SDPA にフォールバックする。
+* 画像生成（SANA 1.6B）: フォールバックでも実用速度に到達
+* 動画生成（SANA-Video）: フォールバック時は FP64 混入 + Eager 実行が顕在化し深刻な性能低下（OS フリーズ）
 
-**今後**: flash-attn の ARM64 対応 wheel のリリースを待つか、[FlashInfer](https://github.com/flashinfer-ai/flashinfer) 等の代替を検討。
+**今後の対応**: [FlashInfer](https://github.com/flashinfer-ai/flashinfer) の ARM64 対応確認、または SANA-Video 実装側の FP64 排除（Triton カーネル化）を待つ。
 
 ### 5. GitHub Actions workflow の push 拒否
 
@@ -163,49 +291,31 @@ pip install mmcv==1.7.2 --no-build-isolation
 
 **症状**: `pip install xformers==0.0.32.post2` の実行時に進行表示が完全に停止し、フリーズしたように見える。
 
-**原因**: ARM64 向けにビルド済みの xformers の wheel が存在しないため、ソースコードから完全に C++ / CUDA コンパイルが走る。
+**原因**: ARM64 向けにビルド済みの xformers wheel が存在しないため、ソースコードから C++ / CUDA コンパイルが走る。
 
-**回避策**: これはフリーズではないため、**そのまま15〜30分待機**してください。並列コンパイルでフリーズや OOM を防ぐため、`setup_sana_env.sh` 内では `export MAX_JOBS=16` を設定しています。コンパイルを高速化するために、事前に `pip install ninja` が入っていることを確認してください。
+**回避策**: フリーズではないため **そのまま15〜30分待機**してください。`setup_sana_env.sh` 内では `export MAX_JOBS=16` を設定し、`ninja` の事前インストールでコンパイルを高速化しています。
 
 ### 7. Hugging Face の Gated Model による推論の「停滞」
 
-**症状**: 初回の推論実行時に、進捗表示がないまま、プログラムが完全に停止（停滞）する。
+**症状**: 初回推論実行時に、進捗表示がないままプログラムが完全に停止（停滞）する。
 
-**原因**: SANAのデフォルト設定ファイルでは、テキストエンコーダとして Google の `gemma-2-2b-it` を指定している。これは Hugging Face の **Gated Model（ゲート付きモデル）** であり、利用規約への合意とアカウント側のアクセス承認（レビュー完了）が必要。アクセス許可がない状態で API が叩かれると、ダウンロードが拒否されるか、無限に入力待ちになりフリーズする。
+**原因**: テキストエンコーダ `gemma-2-2b-it` は Hugging Face の **Gated Model** であり、利用規約への合意が必要。アクセス許可がない状態で API が叩かれると、無限に入力待ちになりフリーズする。
 
-**回避策**: SANAのソースコード（`diffusion/model/builder.py`）の `get_tokenizer_and_text_encoder` を確認すると、`gemma-2-2b-it` のマッピング先はゲートフリーのミラーである **`Efficient-Large-Model/gemma-2-2b-it`** に修正されています。このミラーは誰でも自由にダウンロードできますが、初回起動時に総計約10GBのアセット（Gemma-2-2b + SANAチェックポイント等）をダウンロードするため、プロキシ環境下で進捗表示が見えないとハングしたように見えます。
-ハングを回避するために、事前に `huggingface-hub` を使ってバックグラウンドで事前キャッシュしておくことを推奨します：
+**回避策**: SANAのソースコード（`diffusion/model/builder.py`）では、`gemma-2-2b-it` のマッピング先がゲートフリーのミラー **`Efficient-Large-Model/gemma-2-2b-it`** に修正されています。ただし初回起動時に総計約 10 GB のアセットをダウンロードするため、事前キャッシュを推奨します:
 ```bash
-python3 -c "from huggingface_hub import snapshot_download; snapshot_download(repo_id='Efficient-Large-Model/gemma-2-2b-it', token=True)"
+python3 -c "from huggingface_hub import snapshot_download; snapshot_download(repo_id='Efficient-Large-Model/gemma-2-2b-it')"
 ```
 
----
+### 8. SANA-Video 実行中の OS 完全フリーズ（Unified Memory スラッシング）
 
-## ベンチマーク実測値 (DGX Spark 実測)
+**症状**: `bash run.sh video` 実行後、数分で PC の操作が完全に不能になる。
 
-> 💡 **実機検証結果**: flash-attn 未インストール時の自動フォールバック（xformers / SDPA）が正常に機能し、画像生成については極めて軽快な動作と実用的な速度を記録しました。
+**原因**: 前節「[実装成熟度と実機乖離について](#実装成熟度と実機乖離について)」を参照。FP64 混入と Eager 実行が組み合わさり、Unified Memory 全体（128 GB）を使い切るスラッシングが OS レベルで発生する。
 
-### 計測条件と詳細仕様
-* **モデル精度**: `bfloat16` (`bf16` / 混合精度)
-* **生成設定**: 20 steps / `flow_dpm-solver` scheduler
-* **バックエンド**: `xformers` memory-efficient attention (flash-attn 未インストールによる自動フォールバック)
-* **推論時間**: **6.46秒**（初回実行を除くウォームアップ完了後の3回計測における中央値）。
-  * *初回実行時*: モデルロードおよびJITコンパイル等の初期化処理を含めて約 **15 秒**。
-  * *モデルロード時間*: キャッシュからの初回読み込み時間は約 **8.7 秒**。
-
-| タスク | 解像度 | 生成時間 | メモリ使用量 (VRAM) | 備考 / サンプラー |
-|---|---|---|---|---|
-| **SANA 画像生成 (1.6B)** | 1024×1024 | **6.46 秒** | **12.18 GB** | `bf16` / 20 steps / `flow_dpm-solver` (xformers フォールバック・3回計測中央値) |
-| SANA-Sprint 1step | 1024×1024 | TBD | TBD | **[優先検証ターゲット]** リアルタイム業務用途向け（1step）のレイテンシ検証用 |
-| **SANA-Video (2B)** | 480p (5秒 / 81f) | **約 12.4 分** | 高負荷 (OSロック有) | `bf16` / 50 steps。10件連続生成で実測124分 (736秒/件)。Unified Memory特有のメモリスワップ/スラッシングによりOSが極端に重くなる現象を確認。 |
-| SANA-WM | 720p (60秒) | TBD | TBD | **[想定リスク]** 未検証。flash-attn なしではアテンション計算量が爆発し、OOMや完全なフリーズが発生する可能性が高い |
-
-### 参考: 他環境の公称・実測値 (公式発表)
-
-| 環境 | タスク | 生成時間 | 備考 |
-|---|---|---|---|
-| **H100 (80 GB)** | SANA 1.6B 画像生成 (1024px) | **1.2 秒** | `bf16` / flash-attn あり (公式公称値) |
-| RTX 5090 (32 GB) + NVFP4 | SANA-WM 720p 60秒 | ~34 秒 | (公式発表) |
+**回避策（暫定）**:
+* **業務用途では LTX-Video / WAN-2.1 への切り替えを推奨**
+* SANA-Video を試す場合は、**サンプル数を 1〜2 件に絞り**、**Unified Memory 使用量を `nvidia-smi` で監視**しながら実行する
+* OS フリーズを検知したら強制再起動（電源ボタン長押し）で回復可能
 
 ---
 
@@ -217,14 +327,31 @@ dgx-sana/
 ├── LICENSE                  ← Apache License 2.0 (NVlabs/Sana 由来)
 ├── pyproject.toml           ← ARM64 向けに依存関係を修正済み
 ├── setup_sana_env.sh        ← DGX Spark 向け環境構築スクリプト
+├── run.sh                   ← 統合実行スクリプト (sana/sprint/gui/video/benchmark)
+├── app_gui.py               ← Gradio Web UI
+├── run_sana.py              ← SANA 1.6B 推論スクリプト（ベンチマーク付き）
+├── run_sprint.py            ← SANA-Sprint 推論スクリプト（超高速 1step）
 ├── test_sana_wm.py          ← インストール検証スクリプト
 ├── docs/
-│   └── dgx-spark-setup.md   ← 詳細セットアップ手順
-├── sana/                    ← SANA ソースコード (公式と同一)
-├── diffusion/               ← 拡散モデル関連 (公式と同一)
-├── inference_video_scripts/  ← 推論スクリプト (公式と同一)
+│   └── dgx-spark-setup.md  ← 詳細セットアップ手順
+├── asset/
+│   └── samples/video/      ← DGX Spark 実機生成サンプル動画
+│       ├── sample_anime.mp4 ← アニメ風女性（SANA-Video 2B 480p 5秒）
+│       └── sample_car.mp4  ← アニメ風自動車（SANA-Video 2B 480p 5秒）
+├── inference_video_scripts/ ← 動画推論スクリプト (公式と同一)
 └── configs/                 ← モデル設定ファイル (公式と同一)
 ```
+
+---
+
+## SANA-WM チェックポイントの公開状況
+
+> 🔒 **2026年5月現在**: `Efficient-Large-Model/SANA-WM_bidirectional` は HuggingFace 上で **認証が必要な状態（Gated / 未公開）** です。
+> `inference_sana_wm.py` も NVlabs/Sana のメインリポジトリには含まれていません。
+
+追跡方法:
+* [NVlabs/Sana Releases](https://github.com/NVlabs/Sana/releases)
+* [Efficient-Large-Model HuggingFace Collection](https://huggingface.co/Efficient-Large-Model)
 
 ---
 
@@ -233,7 +360,7 @@ dgx-sana/
 本リポジトリは [NVlabs/Sana](https://github.com/NVlabs/Sana) のフォークです。
 
 - **ライセンス**: [Apache License 2.0](LICENSE) (NVlabs/Sana 由来)
-- **変更点**: ARM64 (DGX Spark) 環境向けの依存関係修正、セットアップスクリプト追加、README の差し替え
+- **変更点**: ARM64 (DGX Spark) 環境向けの依存関係修正、実行スクリプト群の追加、実機ベンチマーク記録を含む README の差し替え
 - **モデル重み**: HuggingFace 上の公式モデル重みには別途ライセンス条件が適用される場合があります。利用前に各モデルカードを確認してください。
 
 ### 引用
