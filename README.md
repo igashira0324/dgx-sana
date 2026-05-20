@@ -59,6 +59,10 @@ bash run.sh [sana|sprint|gui|video|benchmark]
 
 ## クイックスタート
 
+> ⚠️ **環境構築スクリプトに関する注意**:
+> リポジトリ内にある `environment_setup.sh` は公式上流（upstream）に由来する x86_64 + CUDA 12.x 用の古いスクリプトです。
+> **DGX Spark（ARM64 + CUDA 13.0）環境では、必ず新しく追加された `setup_sana_env.sh` を使用してください。**
+
 ```bash
 # 1. リポジトリをクローン
 git clone https://github.com/igashira0324/dgx-sana.git
@@ -151,19 +155,26 @@ ARM64 環境では一部の依存パッケージで PyPI にビルド済み whee
 > ⚠️ **重要**: 下記の実測値は、**flash-attn なし・PyTorch フォールバック実装**で計測した値です。
 > 公式の論文値・H100 公称値とは大幅に乖離しています。乖離の原因については後述の「[実装成熟度と実機乖離について](#実装成熟度と実機乖離について)」を参照してください。
 
-### 計測条件
-
+### 計測メタ情報 (詳細条件)
+* **計測実施日**: 2026年5月20日
+* **検証コミットID**: `6c1c162` (SANA-Sprint計測追加コミット)
+* **OS / GPUドライバ**: Ubuntu 24.04.4 LTS / NVIDIA Driver 580.142 / CUDA 13.0
+* **PyTorch バージョン**: 2.12.0+cu130 (ARM64用ビルド)
 * **モデル精度**: `bfloat16` (`bf16` / 混合精度)
-* **バックエンド**: `xformers` memory-efficient attention または SDPA (flash-attn 未インストールによる自動フォールバック)
+* **TF32設定**: `torch.backends.cuda.matmul.allow_tf32 = True` (PyTorchデフォルト)
+* **torch.compile**: 未適用 (Eager / 未コンパイル)
+* **Attention バックエンド**: 
+  * 画像生成: `xformers` memory-efficient attention (flash-attn未検出による自動フォールバック)
+  * 動画生成: 線形アテンション (`sana_blocks.py`) の `float64` キャスト処理を伴う PyTorch Eager 実行
 
 ### DGX Spark 実測値
 
-| タスク | 解像度 | 生成時間 | 備考 |
-|---|---|---|---|
-| **SANA 画像生成 (1.6B)** | 1024×1024 | **6.46 秒** | 20 steps / `flow_dpm-solver` / xformers フォールバック・3回計測中央値。初回ロード ~15秒 |
-| **SANA-Sprint (2-step)** | 1024×1024 | **1.22 秒** | **[リアルタイム用途に最適]** 2 steps (SCM) / xformers フォールバック・3回計測中央値。VRAM: **10.94 GB**。 |
-| **SANA-Video (2B)** | 480p (5秒 / 81f) | **約 12.4 分/件** | 50 steps / Eager 実行。10件連続で実測 124分 (736秒/件)。**OSが応答不能になる現象を確認（後述）** |
-| SANA-WM | 720p (60秒) | **未実施** | チェックポイント未公開 (2026-05 現在)。実行リスクも高いため未計測 |
+| タスク | 解像度 | 生成時間 (中央値) | 再現コマンド | 備考 / 使用VRAM |
+|---|---|---|---|---|
+| **SANA 画像生成 (1.6B)** | 1024×1024 | **6.46 秒** | `bash run.sh sana` | 20 steps / `flow_dpm-solver` / 3回計測中央値。初回ロード約15秒。VRAM: **12.18 GB** |
+| **SANA-Sprint (2-step)** | 1024×1024 | **1.22 秒** | `bash run.sh sprint` | **[リアルタイム用途に最適]** 2 steps (SCM) / 3回計測中央値。VRAM: **10.94 GB** |
+| **SANA-Video (2B)** | 480p (5秒 / 81f) | **約 12.4 分 (736秒)** | `bash run.sh video` | 50 steps / 10件連続生成時の中央値。**OS応答不能（スラッシング）発生**。VRAM: **Unified Memory上限まで消費** |
+| SANA-WM | 720p (60秒) | **未実施** | — | チェックポイント未公開 (2026-05 現在)。実行リスクも高いため未計測 |
 
 ### 参考: 公式環境の公称値
 
@@ -319,6 +330,25 @@ python3 -c "from huggingface_hub import snapshot_download; snapshot_download(rep
 * **業務用途では LTX-Video / WAN-2.1 への切り替えを推奨**
 * SANA-Video を試す場合は、**サンプル数を 1〜2 件に絞り**、**Unified Memory 使用量を `nvidia-smi` で監視**しながら実行する
 * OS フリーズを検知したら強制再起動（電源ボタン長押し）で回復可能
+
+## Secret / 安全な運用管理ガイドライン
+
+本リポジトリは検証用途での円滑な運用と、GitHub上のセキュリティリスク（トークン流出防止など）を両立するために、以下のルールに沿って運用されています。
+
+### 1. Hugging Face アクセストークン (`HF_TOKEN`) の扱い
+SANAが使用するテキストエンコーダや一部のモデルは Hugging Face 認証を必要とする場合があります。
+* **直接ハードコードしない**: スクリプトの引数やコード内部に `token="hf_xxx"` のようにトークン文字列を直書きしないでください。
+* **推奨される管理方法**:
+  1. `huggingface-cli login` コマンドを実行して `~/.cache/huggingface/token` に認証トークンを安全に永続キャッシュさせる。
+  2. あるいは、環境変数 `HF_TOKEN` または `.env` ファイルを利用する。
+* **環境ファイルの保護**: `.env` を使用する場合、`.gitignore` に明記されていることを確認し、絶対にリポジトリにコミットされないようにしてください（本フォークではすでに対策済みです）。
+
+### 2. プロキシ環境下でのGit運用と認証
+社内等のプロキシ環境下でプロキシエラーにより Git のプッシュ・プルが失敗する場合は、以下のように一時的にプロキシ設定をアンセットして実行することを推奨します。
+```bash
+env -u http_proxy -u https_proxy git push origin main
+```
+* **認証情報の平文保存回避**: コマンドライン履歴（`.bash_history` など）に Personal Access Token (PAT) を含む URL を残さないよう、SSHキーペアによる認証か、資格情報ヘルパー (`git-credential-store`等) を使用してください。
 
 ---
 

@@ -1,4 +1,15 @@
 #!/usr/bin/env bash
+# ============================================================
+# WARNING: This script is inherited from upstream NVlabs/Sana
+# and is NOT compatible with DGX Spark (ARM64 + CUDA 13.0).
+# 
+# For DGX Spark, please use:  bash setup_sana_env.sh
+# ============================================================
+echo "[WARNING] This script targets x86_64 + CUDA 12.x + conda environments."
+echo "[WARNING] DGX Spark (ARM64 + CUDA 13.0) users should run 'bash setup_sana_env.sh' instead."
+read -p "Continue anyway? (y/N): " ans
+[[ "$ans" != "y" && "$ans" != "Y" ]] && exit 1
+
 set -e
 
 # Check if we should skip environment setup entirely
